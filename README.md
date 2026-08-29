@@ -12,7 +12,7 @@ Es una sola página autocontenida sin backend ni dependencias de build. Basta co
 Todos los datos se guardan únicamente en el `localStorage` del navegador que la abre —
 no hay servidor ni sincronización entre dispositivos.
 
-## Qué hace (Fase 1 + Fase 2)
+## Qué hace
 
 - Crear vehículos de inversión con nombre y tipo libre (catálogo abierto).
 - Registrar aportes y valoraciones por vehículo, con fecha, monto, moneda (COP, USD,
@@ -24,15 +24,24 @@ no hay servidor ni sincronización entre dispositivos.
   porcentaje.
 - Gráfico de evolución por vehículo: aportado acumulado vs. valor registrado en el
   tiempo.
+- Alertas de vehículos sin actualizar hace más de 3 meses.
+- Comparación de rendimiento entre vehículos (por TIR cuando existe), con una
+  recomendación simple de dónde concentrar próximos aportes.
+- Diversificación del portafolio por tipo de vehículo y por moneda, con aviso cuando
+  hay concentración alta (≥60 %) en un solo tipo.
 - Dashboard con dos vistas: el portafolio total consolidado en COP (usando la tasa de
   cambio registrada en cada aporte/valoración) y el detalle por moneda original.
-- Exportar todos los datos a JSON o CSV.
+- Exportar todos los datos a JSON o CSV, e importar un JSON exportado para restaurar
+  el estado completo (con confirmación antes de reemplazar los datos actuales) — es
+  el mecanismo de respaldo, ya que todo vive en el `localStorage` del navegador.
 
-## Qué no hace todavía (backlog)
+## Backlog completo
 
-Ver [`Salidas/roadmap.md`](Salidas/roadmap.md): alertas de vehículos sin actualizar,
-comparación de rendimiento entre vehículos, y análisis de diversificación/riesgo del
-portafolio.
+El roadmap original ([`Salidas/roadmap.md`](Salidas/roadmap.md)) ya está implementado
+por completo. Lo que sigue fuera de alcance por decisión de arquitectura (no por
+prioridad): recordatorios automáticos, tasas de cambio o precios de mercado
+automáticos, y multiusuario — todos requieren un backend real, que contradice el
+diseño de esta herramienta como página autocontenida de un solo usuario.
 
 ## Contexto del proyecto
 
