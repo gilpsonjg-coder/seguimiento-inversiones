@@ -1,0 +1,857 @@
+<title>Seguimiento de Inversiones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=DM+Sans:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#003A70;
+    --navy-mid:#2774AE;
+    --orange:#FF6A14;
+    --orange-dark:#E85B08;
+    --ink:#485156;
+    --muted:#6B767C;
+    --faint:#9BA6AC;
+    --line:#D3DCE2;
+    --surface:#fff;
+    --canvas:#EEF2F5;
+    --tint:#F4F7F9;
+    --tint-strong:#E4EBF0;
+    --sidebar-tint:#8FB4D4;
+    --sidebar-chip:#C8DCEC;
+    --good:#1E7A54;
+    --good-soft:#7FD1A8;
+    --bad:#C0392B;
+    --bad-soft:#FF9E8A;
+    --bad-bg:#FBEAE7;
+    --bad-bg-hover:#F7E4E1;
+    --warn-bg:#FFF6F0;
+    --warn-border:#FFD3B8;
+    --warn-text:#B44A08;
+    --warn-chip-bg:#FFE8DA;
+    --neutral-chip:#E1E8EE;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Montserrat',sans-serif;
+    background:var(--canvas);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--navy-mid);text-decoration:none;}
+  a:hover{color:var(--navy);}
+  input,select,button{font-family:'Montserrat',sans-serif;}
+  input:focus,select:focus,button:focus-visible,div[tabindex]:focus-visible{
+    outline:2px solid var(--navy);
+    outline-offset:1px;
+  }
+  ::placeholder{color:var(--faint);}
+  button{cursor:pointer;}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important;}
+  }
+
+  .app-shell{display:flex;height:100vh;min-height:640px;color:var(--ink);}
+
+  .sidebar{width:320px;flex:none;background:var(--navy);color:#fff;display:flex;flex-direction:column;}
+  .sidebar-head{padding:28px 24px 20px 24px;}
+  .brand{font-family:'DM Sans',sans-serif;font-weight:700;font-size:20px;color:#fff;line-height:1.25;}
+  .brand-sub{font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sidebar-tint);margin-top:6px;}
+
+  .nav-row{padding:0 16px 16px 16px;}
+  .nav-item{
+    cursor:pointer;padding:13px 14px;border-radius:12px;display:flex;align-items:center;
+    justify-content:space-between;gap:10px;transition:background 180ms cubic-bezier(0.22,0.61,0.36,1);
+    background:transparent;border:none;width:100%;text-align:left;color:inherit;
+  }
+  .nav-item:hover{background:rgba(255,255,255,0.14);}
+  .nav-item.is-active{background:rgba(255,255,255,0.16);}
+  .nav-item-label{font-size:14px;font-weight:600;color:#fff;}
+  .nav-item-hint{font-size:11px;color:var(--sidebar-tint);}
+
+  .vehicles-head{padding:0 24px 14px 24px;display:flex;align-items:baseline;justify-content:space-between;}
+  .vehicles-head-label{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--sidebar-tint);}
+  .vehicles-head-count{font-size:11px;color:var(--sidebar-tint);}
+
+  .vehicle-list{flex:1;overflow-y:auto;padding:0 16px 16px 16px;display:flex;flex-direction:column;gap:6px;}
+  .vehicle-nav{
+    cursor:pointer;padding:14px 14px;border-radius:12px;display:flex;flex-direction:column;gap:8px;
+    transition:background 180ms cubic-bezier(0.22,0.61,0.36,1);background:transparent;border:none;width:100%;text-align:left;color:inherit;
+  }
+  .vehicle-nav:hover{background:rgba(255,255,255,0.14);}
+  .vehicle-nav.is-active{background:rgba(255,255,255,0.16);}
+  .vehicle-nav-top{display:flex;align-items:flex-start;gap:10px;}
+  .vehicle-nav-name{flex:1;min-width:0;font-size:14px;font-weight:600;color:#fff;line-height:1.35;overflow-wrap:anywhere;}
+  .vehicle-nav-rend{font-size:12px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .vehicle-nav-meta{display:flex;align-items:center;gap:8px;}
+  .chip-type{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,0.12);color:var(--sidebar-chip);}
+  .vehicle-nav-total{font-size:11px;color:var(--sidebar-tint);}
+
+  .empty-sidebar{padding:18px 14px;border-radius:12px;border:1px dashed rgba(255,255,255,0.25);font-size:13px;line-height:1.5;color:var(--sidebar-chip);}
+
+  .sidebar-foot{padding:16px 24px 24px 24px;border-top:1px solid rgba(255,255,255,0.14);}
+  .btn-primary{
+    width:100%;border:none;background:var(--orange);color:#fff;font-size:14px;font-weight:600;
+    padding:13px 16px;border-radius:12px;transition:background 180ms cubic-bezier(0.22,0.61,0.36,1);
+  }
+  .btn-primary:hover{background:var(--orange-dark);}
+  .btn-primary:active{transform:scale(0.98);}
+  .privacy-note{font-size:11px;line-height:1.5;color:var(--sidebar-tint);margin-top:14px;}
+
+  .main{flex:1;min-width:0;overflow-y:auto;}
+  .page{padding:40px 40px 56px 40px;max-width:1120px;animation:fadeIn 320ms cubic-bezier(0.22,0.61,0.36,1);}
+  .eyebrow{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  h1.page-title{font-family:'DM Sans',sans-serif;font-size:34px;font-weight:700;color:var(--navy);margin:12px 0 0 0;line-height:1.15;text-wrap:balance;}
+
+  .currency-row{display:flex;align-items:center;gap:10px;margin-top:22px;flex-wrap:wrap;}
+  .currency-row-label{font-size:12px;color:var(--muted);}
+  .currency-pill{cursor:pointer;border:1px solid var(--line);font-size:13px;font-weight:600;padding:8px 14px;border-radius:999px;background:#fff;color:var(--ink);}
+  .currency-pill.is-active{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+  .grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:26px;align-items:start;}
+  .card{background:var(--surface);border-radius:20px;padding:26px;box-shadow:0 4px 12px rgba(0,58,112,0.08),0 1px 2px rgba(0,58,112,0.04);}
+  .card-label{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .card-value{font-family:'DM Sans',sans-serif;font-size:clamp(24px,2.4vw,34px);font-weight:700;color:var(--navy);margin-top:10px;white-space:nowrap;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;}
+  .card-note{font-size:12px;color:var(--muted);margin-top:6px;}
+
+  .pie-wrap{display:flex;justify-content:center;margin:26px 0 6px 0;}
+  .pie{position:relative;width:210px;height:210px;border-radius:50%;}
+  .pie-hole{position:absolute;inset:56px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .pie-hole-num{font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;color:var(--navy);}
+  .pie-hole-label{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-top:2px;}
+  .pie-note{font-size:12px;line-height:1.5;color:var(--muted);text-align:center;margin-top:12px;}
+
+  .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .section-head h2{font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:var(--navy);font-weight:700;margin:0;}
+  .section-head-hint{font-size:11px;color:var(--muted);}
+
+  .row-list{display:flex;flex-direction:column;gap:6px;margin-top:16px;}
+  .dash-row{
+    cursor:pointer;display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;
+    transition:background 180ms cubic-bezier(0.22,0.61,0.36,1);background:transparent;border:none;width:100%;text-align:left;color:inherit;
+  }
+  .dash-row:hover{background:var(--tint);}
+  .dash-row-dot{flex:none;width:12px;height:12px;border-radius:3px;}
+  .dash-row-name{font-size:14px;font-weight:600;color:var(--navy);line-height:1.3;}
+  .dash-row-type{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--faint);margin-top:3px;}
+  .dash-row-amount{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .dash-row-pct{font-size:12px;color:var(--muted);margin-top:3px;text-align:right;font-variant-numeric:tabular-nums;}
+
+  .empty-box{padding:26px 16px;text-align:center;font-size:13px;line-height:1.5;color:var(--muted);border:1px dashed var(--line);border-radius:12px;}
+  .excluded-note{margin-top:18px;background:var(--tint);border-radius:12px;padding:14px 16px;font-size:12px;line-height:1.55;color:var(--muted);}
+
+  .vehicle-head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+  .vehicle-head-badges{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .chip-generic{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--neutral-chip);color:var(--ink);font-weight:600;}
+  .chip-warn{font-size:10px;letter-spacing:0.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--warn-chip-bg);color:var(--warn-text);font-weight:600;}
+  .vehicle-actions{display:flex;gap:8px;flex:none;}
+  .btn-ghost{cursor:pointer;background:#fff;border:1px solid var(--line);color:var(--ink);font-size:13px;font-weight:600;padding:10px 14px;border-radius:12px;transition:border-color 180ms,color 180ms;}
+  .btn-ghost:hover{border-color:var(--navy);color:var(--navy);}
+  .btn-ghost.danger{color:var(--faint);}
+  .btn-ghost.danger:hover{border-color:var(--bad);color:var(--bad);}
+
+  .grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:28px;}
+  .stat-card{background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 4px 12px rgba(0,58,112,0.08),0 1px 2px rgba(0,58,112,0.04);}
+  .stat-value{font-family:'DM Sans',sans-serif;font-size:clamp(22px,2.1vw,30px);font-weight:700;color:var(--navy);margin-top:12px;letter-spacing:-0.01em;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .stat-note{font-size:12px;color:var(--muted);margin-top:6px;}
+
+  .warning-box{margin-top:16px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:12px;padding:14px 18px;font-size:13px;line-height:1.5;color:var(--warn-text);}
+
+  .grid-records{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:20px;margin-top:32px;}
+  .record-list{display:flex;flex-direction:column;gap:8px;margin-top:18px;}
+  .record-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--tint);}
+  .record-amount{font-size:15px;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums;}
+  .record-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+  .btn-text{cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:6px 8px;border-radius:8px;flex:none;}
+  .btn-text:hover{color:var(--navy);background:var(--tint-strong);}
+  .btn-text.danger:hover{color:var(--bad);background:var(--bad-bg-hover);}
+
+  .roadmap-note{margin-top:28px;display:flex;align-items:flex-start;gap:14px;background:#E9EFF4;border-radius:16px;padding:18px 22px;}
+  .roadmap-tag{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:700;color:var(--navy);flex:none;padding-top:2px;}
+  .roadmap-text{font-size:13px;line-height:1.6;color:var(--ink);}
+
+  .empty-state{height:100%;display:flex;align-items:center;justify-content:center;padding:48px;}
+  .empty-state-inner{max-width:420px;text-align:center;}
+  .empty-state h1{font-family:'DM Sans',sans-serif;font-size:28px;font-weight:700;color:var(--navy);margin:0;text-wrap:balance;}
+  .empty-state p{font-size:14px;line-height:1.65;color:var(--muted);margin:14px 0 24px 0;text-wrap:pretty;}
+  .btn-cta{cursor:pointer;background:var(--orange);border:none;color:#fff;font-size:14px;font-weight:600;padding:13px 22px;border-radius:12px;}
+  .btn-cta:hover{background:var(--orange-dark);}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,58,112,0.55);display:flex;align-items:center;justify-content:center;padding:32px;animation:fadeIn 180ms cubic-bezier(0.22,0.61,0.36,1);z-index:40;}
+  .overlay.is-confirm{z-index:50;}
+  .modal{background:#fff;border-radius:20px;width:460px;max-width:100%;padding:28px;box-shadow:0 12px 32px rgba(0,58,112,0.24);animation:fadeUp 320ms cubic-bezier(0.22,0.61,0.36,1);}
+  .modal.is-confirm{width:420px;}
+  .modal h2{font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;color:var(--navy);margin:0;}
+  .modal.is-confirm h2{font-size:20px;}
+  .modal-sub{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5;}
+  .modal-body{font-size:14px;line-height:1.6;color:var(--ink);margin:12px 0 0 0;}
+  .modal-fields{display:flex;flex-direction:column;gap:16px;margin-top:22px;}
+  .field-group{display:flex;flex-direction:column;gap:14px;}
+  .field{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);}
+  .field input,.field select{
+    font-size:15px;color:var(--navy);padding:12px 14px;border:1px solid var(--line);border-radius:12px;
+    font-weight:500;text-transform:none;letter-spacing:normal;background:#fff;
+  }
+  .field-row{display:flex;gap:12px;}
+  .field-row .field:first-child{flex:1;}
+  .field-row .field:last-child{width:130px;}
+  .field-error{background:var(--bad-bg);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--bad);line-height:1.45;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:26px;}
+  .btn-danger{cursor:pointer;background:var(--bad);border:none;color:#fff;font-size:14px;font-weight:600;padding:12px 22px;border-radius:12px;}
+  .btn-danger:hover{background:#A8301F;}
+  .btn-danger:active{transform:scale(0.98);}
+  .btn-save{cursor:pointer;background:var(--orange);border:none;color:#fff;font-size:14px;font-weight:600;padding:12px 22px;border-radius:12px;}
+  .btn-save:hover{background:var(--orange-dark);}
+  .btn-save:active{transform:scale(0.98);}
+  .btn-cancel{cursor:pointer;background:#fff;border:1px solid var(--line);color:var(--ink);font-size:14px;font-weight:600;padding:12px 18px;border-radius:12px;}
+  .btn-cancel:hover{border-color:var(--navy);color:var(--navy);}
+
+  @media (max-width: 860px){
+    .app-shell{flex-direction:column;height:auto;min-height:100vh;}
+    .sidebar{width:100%;}
+    .vehicle-list{max-height:220px;}
+    .main{overflow-y:visible;}
+    .page{padding:28px 20px 40px 20px;}
+  }
+</style>
+
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var KEY = 'seguimiento-inversiones-v1';
+  var SYM = { COP: '$', USD: 'US$', GBP: '£' };
+  var SLICE = ['#003A70', '#FF6A14', '#2774AE', '#5E7975', '#8FB4D4', '#B44A08', '#1E7A54', '#A9B7BF'];
+
+  function uid(){ return Math.random().toString(36).slice(2, 9); }
+
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  function money(n, cur){
+    var opts = cur === 'COP' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+    return (SYM[cur] || cur) + ' ' + Number(n).toLocaleString('es-CO', opts) + ' ' + cur;
+  }
+  function shortMoney(n, cur){
+    return (SYM[cur] || cur) + ' ' + Number(n).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+  }
+  function parseDateStr(s){
+    var p = String(s).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+  function dateText(s){
+    return parseDateStr(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
+  function ageText(s){
+    var days = Math.round((Date.now() - parseDateStr(s).getTime()) / 86400000);
+    if (days <= 0) return 'hoy';
+    if (days === 1) return 'hace 1 día';
+    if (days < 60) return 'hace ' + days + ' días';
+    var m = Math.round(days / 30);
+    if (m < 24) return 'hace ' + m + ' meses';
+    return 'hace ' + (Math.round(days / 365 * 10) / 10).toString().replace('.', ',') + ' años';
+  }
+  function currenciesOf(v){
+    var set = {};
+    v.aportes.concat(v.valoraciones).forEach(function(r){ set[r.currency] = 1; });
+    return Object.keys(set);
+  }
+  function summarize(v){
+    var curs = currenciesOf(v);
+    var mixed = curs.length > 1;
+    var cur = curs[0] || 'COP';
+    var totalsByCurrency = {};
+    v.aportes.forEach(function(a){ totalsByCurrency[a.currency] = (totalsByCurrency[a.currency] || 0) + a.amount; });
+    var total = totalsByCurrency[cur] || 0;
+    var vals = v.valoraciones.slice().sort(function(a, b){ return parseDateStr(a.date) - parseDateStr(b.date); });
+    var last = vals.length ? vals[vals.length - 1] : null;
+    var rend = null;
+    if (last && !mixed && total > 0) rend = (last.amount - total) / total;
+    return { curs: curs, mixed: mixed, cur: cur, total: total, totalsByCurrency: totalsByCurrency, last: last, rend: rend };
+  }
+  function totalText(v, s){
+    var currs = Object.keys(s.totalsByCurrency);
+    if (currs.length === 0) return '—';
+    if (currs.length === 1) return money(s.total, s.cur);
+    return currs.map(function(c){ return money(s.totalsByCurrency[c], c); }).join(' + ');
+  }
+  function pct(r){
+    var s = (r * 100).toFixed(1).replace('.', ',');
+    return (r > 0 ? '+' : '') + s + ' %';
+  }
+  function isSubjective(v){
+    return /inmueble|finca|apartamento|casa|lote|terreno/i.test(v.type + ' ' + v.name);
+  }
+
+  // ---------- Estado ----------
+  var state = {
+    vehicles: [],
+    selectedId: null,
+    view: 'dashboard',
+    dashCurrency: null,
+    modal: null,
+    confirm: null
+  };
+
+  function load(){
+    try {
+      var raw = window.localStorage.getItem(KEY);
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (d && Array.isArray(d.vehicles)) {
+          state.vehicles = d.vehicles;
+          state.selectedId = d.vehicles.some(function(v){ return v.id === d.selectedId; }) ? d.selectedId : null;
+          if (typeof d.view === 'string') state.view = d.view;
+        }
+      }
+    } catch (e) { /* almacenamiento no disponible */ }
+  }
+  function persist(){
+    try {
+      window.localStorage.setItem(KEY, JSON.stringify({ vehicles: state.vehicles, selectedId: state.selectedId, view: state.view }));
+    } catch (e) { /* ignorar */ }
+  }
+
+  function selectedVehicle(){
+    return state.vehicles.find(function(v){ return v.id === state.selectedId; }) || null;
+  }
+
+  function today(){ return new Date().toISOString().slice(0, 10); }
+
+  // ---------- Acciones ----------
+  function openDashboard(){ state.view = 'dashboard'; render(); }
+  function selectVehicle(id){ state.view = 'vehicle'; state.selectedId = id; persist(); render(); }
+
+  function openModal(m){ state.modal = Object.assign({ error: '' }, m); render(); }
+  function closeModal(){ state.modal = null; render(); }
+
+  function saveModal(){
+    var m = state.modal;
+    if (!m) return;
+
+    if (m.kind === 'vehicle') {
+      var name = (document.getElementById('modal-name').value || '').trim();
+      if (!name) { m.error = 'El vehículo necesita un nombre.'; render(); return; }
+      var type = (document.getElementById('modal-type').value || '').trim() || 'Otro';
+      if (m.editId) {
+        state.vehicles = state.vehicles.map(function(v){
+          return v.id === m.editId ? Object.assign({}, v, { name: name, type: type }) : v;
+        });
+        state.modal = null;
+        persist(); render();
+      } else {
+        var nv = { id: uid(), name: name, type: type, aportes: [], valoraciones: [] };
+        state.vehicles = state.vehicles.concat([nv]);
+        state.modal = null;
+        state.selectedId = nv.id;
+        state.view = 'vehicle';
+        persist(); render();
+      }
+      return;
+    }
+
+    var listKey = m.kind === 'aporte' ? 'aportes' : 'valoraciones';
+    var date = document.getElementById('modal-date').value;
+    if (!date) { m.error = 'Indique la fecha del registro.'; render(); return; }
+    var rawAmount = String(document.getElementById('modal-amount').value || '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    var amount = Number(rawAmount);
+    if (!rawAmount || isNaN(amount)) { m.error = 'Escriba un monto numérico válido.'; render(); return; }
+    if (amount <= 0) { m.error = 'El monto debe ser mayor que cero.'; render(); return; }
+    var currency = document.getElementById('modal-currency').value;
+
+    state.vehicles = state.vehicles.map(function(v){
+      if (v.id !== m.vehicleId) return v;
+      var list;
+      if (m.editId) {
+        list = v[listKey].map(function(r){ return r.id === m.editId ? { id: r.id, date: date, amount: amount, currency: currency } : r; });
+      } else {
+        list = v[listKey].concat([{ id: uid(), date: date, amount: amount, currency: currency }]);
+      }
+      var patch = {}; patch[listKey] = list;
+      return Object.assign({}, v, patch);
+    });
+    state.modal = null;
+    persist(); render();
+  }
+
+  function askDelete(c){ state.confirm = c; render(); }
+  function closeConfirm(){ state.confirm = null; render(); }
+  function doConfirm(){
+    var c = state.confirm;
+    if (!c) return;
+    if (c.kind === 'vehicle') {
+      state.vehicles = state.vehicles.filter(function(v){ return v.id !== c.vehicleId; });
+      if (state.selectedId === c.vehicleId) state.selectedId = state.vehicles[0] ? state.vehicles[0].id : null;
+      state.confirm = null;
+      persist(); render();
+      return;
+    }
+    var listKey = c.kind === 'aporte' ? 'aportes' : 'valoraciones';
+    state.vehicles = state.vehicles.map(function(v){
+      if (v.id !== c.vehicleId) return v;
+      var patch = {}; patch[listKey] = v[listKey].filter(function(r){ return r.id !== c.id; });
+      return Object.assign({}, v, patch);
+    });
+    state.confirm = null;
+    persist(); render();
+  }
+
+  // ---------- Cálculos de vista ----------
+  function dashVals(){
+    var byCur = {};
+    state.vehicles.forEach(function(v){
+      v.aportes.forEach(function(a){
+        if (!byCur[a.currency]) byCur[a.currency] = {};
+        byCur[a.currency][v.id] = (byCur[a.currency][v.id] || 0) + a.amount;
+      });
+    });
+    var order = ['COP', 'USD', 'GBP'].filter(function(c){ return byCur[c]; })
+      .concat(Object.keys(byCur).filter(function(c){ return ['COP', 'USD', 'GBP'].indexOf(c) < 0; }));
+    var cur = (state.dashCurrency && byCur[state.dashCurrency]) ? state.dashCurrency : (order[0] || 'COP');
+    var map = byCur[cur] || {};
+    var total = Object.keys(map).reduce(function(s, k){ return s + map[k]; }, 0);
+    var rows = state.vehicles.filter(function(v){ return map[v.id]; }).map(function(v){ return { v: v, amount: map[v.id] }; })
+      .sort(function(a, b){ return b.amount - a.amount; })
+      .map(function(e, i){
+        return {
+          id: e.v.id,
+          name: e.v.name,
+          type: e.v.type,
+          color: SLICE[i % SLICE.length],
+          amount: e.amount,
+          amountText: money(e.amount, cur),
+          pctText: total > 0 ? (e.amount / total * 100).toFixed(1).replace('.', ',') + ' % del total' : '—'
+        };
+      });
+    var acc = 0;
+    var stops = rows.map(function(r){
+      var from = acc;
+      acc += total > 0 ? (r.amount / total * 100) : 0;
+      return r.color + ' ' + from.toFixed(2) + '% ' + acc.toFixed(2) + '%';
+    });
+    var excluded = order.filter(function(c){ return c !== cur; });
+    return {
+      currencyLabel: cur,
+      multiCurrency: order.length > 1,
+      currencies: order.map(function(c){ return { label: c, active: c === cur }; }),
+      totalText: rows.length ? money(total, cur) : '—',
+      totalNote: rows.length ? 'Suma de todos los aportes registrados en ' + cur : 'Sin aportes registrados en ' + cur,
+      pieGradient: rows.length ? 'conic-gradient(' + stops.join(', ') + ')' : '#E4EBF0',
+      sliceCount: String(rows.length),
+      pieNote: rows.length ? 'Participación sobre el capital aportado, no sobre el valor actual.' : 'Registre aportes para ver la participación.',
+      rows: rows,
+      noRows: rows.length === 0,
+      hasExcluded: excluded.length > 0,
+      excludedText: excluded.length
+        ? 'Hay vehículos con aportes en ' + excluded.join(' y ') + '. La Fase 1 no convierte monedas, por eso cada moneda se consolida por separado.'
+        : ''
+    };
+  }
+
+  function recordsOf(v, kind){
+    var listKey = kind === 'aporte' ? 'aportes' : 'valoraciones';
+    return v[listKey].slice().sort(function(a, b){ return parseDateStr(b.date) - parseDateStr(a.date); }).map(function(r){
+      return {
+        id: r.id,
+        amountText: money(r.amount, r.currency),
+        metaText: dateText(r.date) + ' · ' + ageText(r.date)
+      };
+    });
+  }
+
+  // ---------- Render ----------
+  var root = document.getElementById('app');
+
+  function render(){
+    root.innerHTML = renderShell();
+  }
+
+  function renderShell(){
+    return '' +
+      '<div class="app-shell">' +
+        renderSidebar() +
+        '<main class="main">' + renderMain() + '</main>' +
+        (state.modal ? renderModal() : '') +
+        (state.confirm ? renderConfirm() : '') +
+      '</div>';
+  }
+
+  function renderSidebar(){
+    var count = state.vehicles.length;
+    var countText = count === 1 ? '1 activo' : count + ' activos';
+
+    var items = state.vehicles.map(function(v){
+      var s = summarize(v);
+      var rendShort = s.rend === null ? '—' : pct(s.rend);
+      var rendColor = s.rend === null ? 'var(--sidebar-tint)' : (s.rend >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)');
+      var active = v.id === state.selectedId && state.view === 'vehicle';
+      var totalShort = s.mixed ? 'Varias monedas' : shortMoney(s.total, s.cur) + ' aportado';
+      return '' +
+        '<button type="button" class="vehicle-nav' + (active ? ' is-active' : '') + '" data-action="select-vehicle" data-id="' + v.id + '">' +
+          '<div class="vehicle-nav-top">' +
+            '<div class="vehicle-nav-name">' + escapeHtml(v.name) + '</div>' +
+            '<div class="vehicle-nav-rend" style="color:' + rendColor + '">' + rendShort + '</div>' +
+          '</div>' +
+          '<div class="vehicle-nav-meta">' +
+            '<span class="chip-type">' + escapeHtml(v.type) + '</span>' +
+            '<span class="vehicle-nav-total">' + totalShort + '</span>' +
+          '</div>' +
+        '</button>';
+    }).join('');
+
+    return '' +
+      '<aside class="sidebar">' +
+        '<div class="sidebar-head">' +
+          '<div class="brand">Inversiones personales</div>' +
+          '<div class="brand-sub">Seguimiento de inversiones</div>' +
+        '</div>' +
+        '<div class="nav-row">' +
+          '<button type="button" class="nav-item' + (state.view === 'dashboard' ? ' is-active' : '') + '" data-action="open-dashboard">' +
+            '<span class="nav-item-label">Dashboard</span>' +
+            '<span class="nav-item-hint">Consolidado</span>' +
+          '</button>' +
+        '</div>' +
+        '<div class="vehicles-head">' +
+          '<span class="vehicles-head-label">Vehículos</span>' +
+          '<span class="vehicles-head-count">' + countText + '</span>' +
+        '</div>' +
+        '<div class="vehicle-list">' +
+          items +
+          (count === 0 ? '<div class="empty-sidebar">Todavía no hay vehículos. Cree el primero para empezar a registrar aportes y valoraciones.</div>' : '') +
+        '</div>' +
+        '<div class="sidebar-foot">' +
+          '<button type="button" class="btn-primary" data-action="new-vehicle">Nuevo vehículo</button>' +
+          '<div class="privacy-note">Los datos viven únicamente en este navegador. No se envían a ningún servidor.</div>' +
+        '</div>' +
+      '</aside>';
+  }
+
+  function renderMain(){
+    if (state.view === 'dashboard') return renderDashboard();
+    var v = selectedVehicle();
+    if (v) return renderVehicle(v);
+    return renderEmptySelection();
+  }
+
+  function renderDashboard(){
+    var d = dashVals();
+
+    var currencyRow = d.multiCurrency ? (
+      '<div class="currency-row">' +
+        '<span class="currency-row-label">Moneda:</span>' +
+        d.currencies.map(function(c){
+          return '<button type="button" class="currency-pill' + (c.active ? ' is-active' : '') + '" data-action="select-currency" data-currency="' + c.label + '">' + c.label + '</button>';
+        }).join('') +
+      '</div>'
+    ) : '';
+
+    var rowsHtml = d.noRows
+      ? '<div class="empty-box">Todavía no hay aportes registrados en esta moneda.</div>'
+      : d.rows.map(function(r){
+          return '' +
+            '<button type="button" class="dash-row" data-action="open-vehicle" data-id="' + r.id + '">' +
+              '<span class="dash-row-dot" style="background:' + r.color + '"></span>' +
+              '<div style="flex:1;min-width:0;">' +
+                '<div class="dash-row-name">' + escapeHtml(r.name) + '</div>' +
+                '<div class="dash-row-type">' + escapeHtml(r.type) + '</div>' +
+              '</div>' +
+              '<div style="text-align:right;flex:none;">' +
+                '<div class="dash-row-amount">' + r.amountText + '</div>' +
+                '<div class="dash-row-pct">' + r.pctText + '</div>' +
+              '</div>' +
+            '</button>';
+        }).join('');
+
+    return '' +
+      '<div class="page">' +
+        '<div class="eyebrow">Consolidado del portafolio</div>' +
+        '<h1 class="page-title">Dashboard</h1>' +
+        currencyRow +
+        '<div class="grid-2">' +
+          '<section class="card">' +
+            '<div class="card-label">Total invertido</div>' +
+            '<div class="card-value">' + d.totalText + '</div>' +
+            '<div class="card-note">' + d.totalNote + '</div>' +
+            '<div class="pie-wrap">' +
+              '<div class="pie" style="background:' + d.pieGradient + '">' +
+                '<div class="pie-hole">' +
+                  '<div class="pie-hole-num">' + d.sliceCount + '</div>' +
+                  '<div class="pie-hole-label">Vehículos</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="pie-note">' + d.pieNote + '</div>' +
+          '</section>' +
+          '<section class="card">' +
+            '<div class="section-head">' +
+              '<h2>Participación por vehículo</h2>' +
+              '<span class="section-head-hint">' + d.currencyLabel + '</span>' +
+            '</div>' +
+            '<div class="row-list">' + rowsHtml + '</div>' +
+            (d.hasExcluded ? '<div class="excluded-note">' + d.excludedText + '</div>' : '') +
+          '</section>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderVehicle(v){
+    var s = summarize(v);
+    var subjective = isSubjective(v);
+    var aportes = recordsOf(v, 'aporte');
+    var valoraciones = recordsOf(v, 'valoracion');
+
+    var totalTextVal = totalText(v, s);
+    var aporteCountText = v.aportes.length === 0 ? 'Sin aportes' : (v.aportes.length === 1 ? '1 aporte registrado' : v.aportes.length + ' aportes registrados');
+    var lastValText = s.last ? money(s.last.amount, s.last.currency) : '—';
+    var lastValDateText = s.last ? dateText(s.last.date) + ' · ' + ageText(s.last.date) : 'Sin valoraciones registradas';
+    var rendText = s.rend === null ? '—' : pct(s.rend);
+    var rendColor = s.rend === null ? 'var(--faint)' : (s.rend >= 0 ? 'var(--good)' : 'var(--bad)');
+    var rendNote = s.rend === null
+      ? (s.mixed ? 'Registros en varias monedas' : (v.aportes.length === 0 ? 'Falta registrar aportes' : 'Falta una valoración para calcularlo'))
+      : (subjective ? 'Sobre un valor estimado por usted' : 'Última valoración vs. total aportado');
+
+    function recordRows(list, kind){
+      if (!list.length) {
+        var msg = kind === 'aporte'
+          ? 'Sin aportes registrados. Registre el primero con fecha, monto y moneda.'
+          : 'Sin valoraciones registradas. Mientras no exista una, no se muestra ningún porcentaje de rendimiento.';
+        return '<div class="empty-box">' + msg + '</div>';
+      }
+      return list.map(function(r){
+        return '' +
+          '<div class="record-row">' +
+            '<div style="flex:1;min-width:0;">' +
+              '<div class="record-amount">' + r.amountText + '</div>' +
+              '<div class="record-meta">' + r.metaText + '</div>' +
+            '</div>' +
+            '<button type="button" class="btn-text" data-action="edit-record" data-kind="' + kind + '" data-id="' + r.id + '">Editar</button>' +
+            '<button type="button" class="btn-text danger" data-action="delete-record" data-kind="' + kind + '" data-id="' + r.id + '">Borrar</button>' +
+          '</div>';
+      }).join('');
+    }
+
+    return '' +
+      '<div class="page">' +
+        '<div class="vehicle-head">' +
+          '<div style="min-width:0;">' +
+            '<div class="vehicle-head-badges">' +
+              '<span class="chip-generic">' + escapeHtml(v.type) + '</span>' +
+              (subjective ? '<span class="chip-warn">Valor estimado</span>' : '') +
+            '</div>' +
+            '<h1 class="page-title">' + escapeHtml(v.name) + '</h1>' +
+          '</div>' +
+          '<div class="vehicle-actions">' +
+            '<button type="button" class="btn-ghost" data-action="edit-vehicle">Editar vehículo</button>' +
+            '<button type="button" class="btn-ghost danger" data-action="delete-vehicle">Borrar</button>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="grid-3">' +
+          '<div class="stat-card">' +
+            '<div class="card-label">Total aportado</div>' +
+            '<div class="stat-value" style="white-space:normal;">' + totalTextVal + '</div>' +
+            '<div class="stat-note">' + aporteCountText + '</div>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<div class="card-label">Última valoración</div>' +
+            '<div class="stat-value">' + lastValText + '</div>' +
+            '<div class="stat-note">' + lastValDateText + '</div>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<div class="card-label">Rendimiento acumulado</div>' +
+            '<div class="stat-value" style="color:' + rendColor + '">' + rendText + '</div>' +
+            '<div class="stat-note">' + rendNote + '</div>' +
+          '</div>' +
+        '</div>' +
+
+        (s.mixed ? '<div class="warning-box">Este vehículo tiene registros en más de una moneda. La Fase 1 no convierte monedas, por eso el rendimiento no se calcula aquí.</div>' : '') +
+
+        '<div class="grid-records">' +
+          '<section class="card">' +
+            '<div class="section-head">' +
+              '<h2>Aportes</h2>' +
+              '<button type="button" class="btn-ghost" style="background:var(--navy);border-color:var(--navy);color:#fff;padding:9px 14px;" data-action="new-aporte">Registrar aporte</button>' +
+            '</div>' +
+            '<div class="record-list">' + recordRows(aportes, 'aporte') + '</div>' +
+          '</section>' +
+          '<section class="card">' +
+            '<div class="section-head">' +
+              '<h2>Valoraciones</h2>' +
+              '<button type="button" class="btn-ghost" style="background:var(--navy);border-color:var(--navy);color:#fff;padding:9px 14px;" data-action="new-valoracion">Registrar valoración</button>' +
+            '</div>' +
+            '<div class="record-list">' + recordRows(valoraciones, 'valoracion') + '</div>' +
+          '</section>' +
+        '</div>' +
+
+        '<div class="roadmap-note">' +
+          '<div class="roadmap-tag">Fase 1</div>' +
+          '<div class="roadmap-text">Esta versión registra aportes y valoraciones y calcula el rendimiento simple por vehículo. XIRR, consolidado en COP, gráficos de tendencia y exportación de datos llegan en la Fase 2.</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderEmptySelection(){
+    return '' +
+      '<div class="empty-state">' +
+        '<div class="empty-state-inner">' +
+          '<h1>Empiece por un vehículo</h1>' +
+          '<p>Cree un vehículo de inversión con su nombre y tipo — a2censo, CDT, acciones, un inmueble — y registre después sus aportes y valoraciones.</p>' +
+          '<button type="button" class="btn-cta" data-action="new-vehicle">Nuevo vehículo</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderModal(){
+    var m = state.modal;
+    var titles = {
+      vehicle: m.editId ? 'Editar vehículo' : 'Nuevo vehículo de inversión',
+      aporte: m.editId ? 'Editar aporte' : 'Registrar aporte',
+      valoracion: m.editId ? 'Editar valoración' : 'Registrar valoración'
+    };
+    var subs = {
+      vehicle: 'El tipo es texto libre: escriba el que use usted, no hay catálogo cerrado.',
+      aporte: 'Dinero que entra a la inversión, en la moneda en que lo aportó.',
+      valoracion: 'Valor actual del activo en esa fecha. Puede registrarlo cuando quiera, no solo al aportar.'
+    };
+    var isVehicle = m.kind === 'vehicle';
+    var amountLabel = m.kind === 'valoracion' ? 'Valor del activo' : 'Monto aportado';
+
+    var fields = isVehicle ? (
+      '<div class="field-group">' +
+        '<label class="field">Nombre' +
+          '<input id="modal-name" value="' + escapeHtml(m.name || '') + '" placeholder="a2censo — Operación XYZ">' +
+        '</label>' +
+        '<label class="field">Tipo (texto libre)' +
+          '<input id="modal-type" value="' + escapeHtml(m.type || '') + '" placeholder="a2censo, CDT, Acciones, Inmueble…">' +
+        '</label>' +
+      '</div>'
+    ) : (
+      '<div class="field-group">' +
+        '<label class="field">Fecha' +
+          '<input id="modal-date" type="date" value="' + escapeHtml(m.date || '') + '">' +
+        '</label>' +
+        '<div class="field-row">' +
+          '<label class="field">' + amountLabel +
+            '<input id="modal-amount" value="' + escapeHtml(m.amount || '') + '" placeholder="0">' +
+          '</label>' +
+          '<label class="field">Moneda' +
+            '<select id="modal-currency">' +
+              ['COP','USD','GBP'].map(function(c){ return '<option value="' + c + '"' + (((m.currency || 'COP') === c) ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+            '</select>' +
+          '</label>' +
+        '</div>' +
+      '</div>'
+    );
+
+    return '' +
+      '<div class="overlay">' +
+        '<div class="modal">' +
+          '<h2>' + titles[m.kind] + '</h2>' +
+          '<div class="modal-sub">' + subs[m.kind] + '</div>' +
+          '<div class="modal-fields">' +
+            fields +
+            (m.error ? '<div class="field-error">' + escapeHtml(m.error) + '</div>' : '') +
+          '</div>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn-cancel" data-action="close-modal">Cancelar</button>' +
+            '<button type="button" class="btn-save" data-action="save-modal">Guardar</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderConfirm(){
+    var c = state.confirm;
+    return '' +
+      '<div class="overlay is-confirm">' +
+        '<div class="modal is-confirm">' +
+          '<h2>' + escapeHtml(c.title) + '</h2>' +
+          '<p class="modal-body">' + escapeHtml(c.body) + '</p>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn-cancel" data-action="close-confirm">Cancelar</button>' +
+            '<button type="button" class="btn-danger" data-action="confirm-delete">Sí, borrar</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ---------- Delegación de eventos ----------
+  root.addEventListener('click', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    var v, r;
+
+    switch (action) {
+      case 'open-dashboard': openDashboard(); break;
+      case 'select-vehicle': selectVehicle(el.getAttribute('data-id')); break;
+      case 'open-vehicle': selectVehicle(el.getAttribute('data-id')); break;
+      case 'select-currency': state.dashCurrency = el.getAttribute('data-currency'); render(); break;
+      case 'new-vehicle': openModal({ kind: 'vehicle', name: '', type: '' }); break;
+      case 'edit-vehicle':
+        v = selectedVehicle();
+        if (v) openModal({ kind: 'vehicle', editId: v.id, name: v.name, type: v.type });
+        break;
+      case 'delete-vehicle':
+        v = selectedVehicle();
+        if (v) askDelete({ kind: 'vehicle', vehicleId: v.id, title: 'Borrar el vehículo',
+          body: 'Se eliminará «' + v.name + '» junto con todos sus aportes y valoraciones. No hay forma de deshacer esta acción.' });
+        break;
+      case 'new-aporte':
+        v = selectedVehicle();
+        if (v) openModal({ kind: 'aporte', vehicleId: v.id, date: today(), amount: '', currency: summarize(v).cur });
+        break;
+      case 'new-valoracion':
+        v = selectedVehicle();
+        if (v) openModal({ kind: 'valoracion', vehicleId: v.id, date: today(), amount: '', currency: summarize(v).cur });
+        break;
+      case 'edit-record':
+        v = selectedVehicle();
+        if (v) {
+          var kind = el.getAttribute('data-kind');
+          var listKey = kind === 'aporte' ? 'aportes' : 'valoraciones';
+          r = v[listKey].find(function(x){ return x.id === el.getAttribute('data-id'); });
+          if (r) openModal({ kind: kind, vehicleId: v.id, editId: r.id, date: r.date, amount: String(r.amount), currency: r.currency });
+        }
+        break;
+      case 'delete-record':
+        v = selectedVehicle();
+        if (v) {
+          var kind2 = el.getAttribute('data-kind');
+          var listKey2 = kind2 === 'aporte' ? 'aportes' : 'valoraciones';
+          r = v[listKey2].find(function(x){ return x.id === el.getAttribute('data-id'); });
+          if (r) askDelete({ kind: kind2, vehicleId: v.id, id: r.id,
+            title: kind2 === 'aporte' ? 'Borrar este aporte' : 'Borrar esta valoración',
+            body: 'Se eliminará el registro de ' + money(r.amount, r.currency) + ' del ' + dateText(r.date) + '. No hay forma de deshacer esta acción.' });
+        }
+        break;
+      case 'close-modal': closeModal(); break;
+      case 'save-modal': saveModal(); break;
+      case 'close-confirm': closeConfirm(); break;
+      case 'confirm-delete': doConfirm(); break;
+    }
+  });
+
+  root.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') {
+      if (state.confirm) { closeConfirm(); return; }
+      if (state.modal) { closeModal(); return; }
+    }
+    if (e.key === 'Enter' && state.modal) {
+      var tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select') { e.preventDefault(); saveModal(); }
+    }
+  });
+
+  load();
+  render();
+})();
+</script>
