@@ -226,7 +226,21 @@
 
   .btn-link-sidebar{cursor:pointer;background:transparent;border:none;color:var(--sidebar-tint);font-size:11px;font-weight:600;padding:0;text-decoration:underline;text-underline-offset:2px;}
   .btn-link-sidebar:hover{color:#fff;}
-  .export-row{display:flex;gap:14px;margin-top:12px;}
+  .export-row{display:flex;gap:14px;margin-top:12px;flex-wrap:wrap;}
+  .import-error{font-size:11px;color:var(--bad-soft);margin-top:8px;line-height:1.4;}
+
+  .stale-badge{font-size:9px;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:rgba(255,106,20,0.28);color:#FFD9C4;margin-top:2px;display:inline-block;align-self:flex-start;}
+
+  .rank-medal{flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;background:var(--navy-mid);}
+  .rank-pct{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .rank-xirr{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums;}
+
+  .diversif-row{display:flex;align-items:center;gap:10px;padding:8px 0;}
+  .diversif-bar-wrap{flex:1;height:8px;background:var(--tint-strong);border-radius:999px;overflow:hidden;}
+  .diversif-bar{height:100%;border-radius:999px;}
+  .diversif-label{width:120px;flex:none;font-size:12px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .diversif-pct{width:52px;flex:none;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  .subsection-h{font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:var(--navy);font-weight:700;margin:0;}
 
   @media (max-width: 860px){
     .app-shell{flex-direction:column;height:auto;min-height:100vh;}
@@ -272,14 +286,16 @@
   function dateTextFromDate(d){
     return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
   }
-  function ageText(s){
-    var days = Math.round((Date.now() - parseDateStr(s).getTime()) / 86400000);
+  function ageTextFromDays(days){
     if (days <= 0) return 'hoy';
     if (days === 1) return 'hace 1 día';
     if (days < 60) return 'hace ' + days + ' días';
     var m = Math.round(days / 30);
     if (m < 24) return 'hace ' + m + ' meses';
     return 'hace ' + (Math.round(days / 365 * 10) / 10).toString().replace('.', ',') + ' años';
+  }
+  function ageText(s){
+    return ageTextFromDays(Math.round((Date.now() - parseDateStr(s).getTime()) / 86400000));
   }
   function currenciesOf(v){
     var set = {};
@@ -385,7 +401,8 @@
     view: 'dashboard',
     dashCurrency: null,
     modal: null,
-    confirm: null
+    confirm: null,
+    importError: ''
   };
 
   function load(){
@@ -486,6 +503,14 @@
   function doConfirm(){
     var c = state.confirm;
     if (!c) return;
+    if (c.kind === 'import') {
+      state.vehicles = c.importData;
+      state.selectedId = state.vehicles[0] ? state.vehicles[0].id : null;
+      state.view = 'dashboard';
+      state.confirm = null;
+      persist(); render();
+      return;
+    }
     if (c.kind === 'vehicle') {
       state.vehicles = state.vehicles.filter(function(v){ return v.id !== c.vehicleId; });
       if (state.selectedId === c.vehicleId) state.selectedId = state.vehicles[0] ? state.vehicles[0].id : null;
@@ -597,6 +622,58 @@
     };
   }
 
+  var STALE_DAYS = 90;
+  function lastActivityDate(v){
+    var dates = v.aportes.concat(v.valoraciones).map(function(r){ return parseDateStr(r.date).getTime(); });
+    if (!dates.length) return null;
+    return new Date(Math.max.apply(null, dates));
+  }
+  function daysSince(d){
+    return Math.round((Date.now() - d.getTime()) / 86400000);
+  }
+  function isStale(v){
+    var d = lastActivityDate(v);
+    return !!d && daysSince(d) > STALE_DAYS;
+  }
+  function staleVehicles(){
+    return state.vehicles.filter(isStale);
+  }
+
+  function comparisonRows(){
+    var rows = state.vehicles
+      .map(function(v){ return { v: v, s: summarize(v) }; })
+      .filter(function(e){ return e.s.rend !== null; })
+      .map(function(e){ return { id: e.v.id, name: e.v.name, type: e.v.type, rend: e.s.rend, xirrRate: e.s.xirrRate }; })
+      .sort(function(a, b){
+        var av = a.xirrRate !== null ? a.xirrRate : a.rend;
+        var bv = b.xirrRate !== null ? b.xirrRate : b.rend;
+        return bv - av;
+      });
+    return { rows: rows, excluded: state.vehicles.length - rows.length };
+  }
+
+  function diversification(){
+    var byType = {}, byCurrency = {};
+    var total = 0, missingCount = 0;
+    state.vehicles.forEach(function(v){
+      v.aportes.forEach(function(a){
+        var cop = toCOP(a);
+        if (cop === null) { missingCount++; return; }
+        total += cop;
+        byType[v.type] = (byType[v.type] || 0) + cop;
+        byCurrency[a.currency] = (byCurrency[a.currency] || 0) + cop;
+      });
+    });
+    function toRows(map){
+      return Object.keys(map).map(function(k){ return { label: k, amount: map[k] }; })
+        .sort(function(a, b){ return b.amount - a.amount; })
+        .map(function(r, i){ return { label: r.label, amount: r.amount, pct: total > 0 ? r.amount / total * 100 : 0, color: SLICE[i % SLICE.length] }; });
+    }
+    var typeRows = toRows(byType);
+    var curRows = toRows(byCurrency);
+    return { total: total, missingCount: missingCount, typeRows: typeRows, curRows: curRows, topType: typeRows[0] || null };
+  }
+
   function shortDateLabel(d){
     return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
   }
@@ -701,6 +778,63 @@
     }
   }
 
+  function validImportRecord(r){
+    return r && typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
+      typeof r.amount === 'number' && r.amount > 0 &&
+      (r.currency === 'COP' || r.currency === 'USD' || r.currency === 'GBP');
+  }
+  function sanitizeImportRecord(r){
+    var out = { id: (typeof r.id === 'string' && r.id) ? r.id : uid(), date: r.date, amount: r.amount, currency: r.currency };
+    if (typeof r.fxRate === 'number' && r.fxRate > 0) out.fxRate = r.fxRate;
+    return out;
+  }
+  function sanitizeImportVehicles(list){
+    return list.filter(function(v){ return v && typeof v.name === 'string' && v.name.trim(); }).map(function(v){
+      return {
+        id: (typeof v.id === 'string' && v.id) ? v.id : uid(),
+        name: v.name,
+        type: (typeof v.type === 'string' && v.type.trim()) ? v.type : 'Otro',
+        aportes: Array.isArray(v.aportes) ? v.aportes.filter(validImportRecord).map(sanitizeImportRecord) : [],
+        valoraciones: Array.isArray(v.valoraciones) ? v.valoraciones.filter(validImportRecord).map(sanitizeImportRecord) : []
+      };
+    });
+  }
+  function handleImportFile(file){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var data;
+      try { data = JSON.parse(reader.result); } catch (e) {
+        state.importError = 'El archivo no es un JSON válido.';
+        render();
+        return;
+      }
+      if (!data || !Array.isArray(data.vehicles)) {
+        state.importError = 'El archivo no tiene el formato esperado (debe ser un JSON exportado desde esta app).';
+        render();
+        return;
+      }
+      var sanitized = sanitizeImportVehicles(data.vehicles);
+      if (!sanitized.length) {
+        state.importError = 'El archivo no contiene vehículos válidos para importar.';
+        render();
+        return;
+      }
+      state.importError = '';
+      state.confirm = {
+        kind: 'import',
+        importData: sanitized,
+        title: 'Reemplazar todos los datos',
+        body: 'Se reemplazarán los ' + state.vehicles.length + ' vehículo(s) actuales por los ' + sanitized.length + ' del archivo importado. Esta acción no se puede deshacer.'
+      };
+      render();
+    };
+    reader.onerror = function(){
+      state.importError = 'No se pudo leer el archivo.';
+      render();
+    };
+    reader.readAsText(file);
+  }
+
   // ---------- Render ----------
   var root = document.getElementById('app');
 
@@ -738,6 +872,7 @@
             '<span class="chip-type">' + escapeHtml(v.type) + '</span>' +
             '<span class="vehicle-nav-total">' + totalShort + '</span>' +
           '</div>' +
+          (isStale(v) ? '<span class="stale-badge">Sin actualizar hace tiempo</span>' : '') +
         '</button>';
     }).join('');
 
@@ -764,12 +899,13 @@
         '<div class="sidebar-foot">' +
           '<button type="button" class="btn-primary" data-action="new-vehicle">Nuevo vehículo</button>' +
           '<div class="privacy-note">Los datos viven únicamente en este navegador. No se envían a ningún servidor.</div>' +
-          (count > 0 ? (
-            '<div class="export-row">' +
-              '<button type="button" class="btn-link-sidebar" data-action="export-json">Exportar JSON</button>' +
-              '<button type="button" class="btn-link-sidebar" data-action="export-csv">Exportar CSV</button>' +
-            '</div>'
-          ) : '') +
+          '<div class="export-row">' +
+            (count > 0 ? '<button type="button" class="btn-link-sidebar" data-action="export-json">Exportar JSON</button>' : '') +
+            (count > 0 ? '<button type="button" class="btn-link-sidebar" data-action="export-csv">Exportar CSV</button>' : '') +
+            '<button type="button" class="btn-link-sidebar" data-action="import-json">Importar JSON</button>' +
+          '</div>' +
+          (state.importError ? '<div class="import-error">' + escapeHtml(state.importError) + '</div>' : '') +
+          '<input type="file" id="import-file-input" accept="application/json" style="display:none;">' +
         '</div>' +
       '</aside>';
   }
@@ -784,6 +920,80 @@
   function renderDashboard(){
     var d = dashVals();
     var p = portfolioCOP();
+    var stale = staleVehicles();
+    var comp = comparisonRows();
+    var div = diversification();
+
+    var alertsHtml = stale.length ? (
+      '<div class="section-eyebrow" style="margin-top:26px;">Alertas</div>' +
+      '<div class="warning-box">' +
+        (stale.length === 1 ? 'Un vehículo' : stale.length + ' vehículos') + ' sin actualizar hace más de 3 meses: ' +
+        stale.map(function(v){ return escapeHtml(v.name) + ' (' + ageTextFromDays(daysSince(lastActivityDate(v))) + ')'; }).join(', ') + '.' +
+      '</div>'
+    ) : '';
+
+    var comparisonHtml = '' +
+      '<div class="section-eyebrow">Comparación de rendimiento</div>' +
+      (comp.rows.length === 0
+        ? '<div class="empty-box">Se necesita al menos un vehículo con aportes y valoración en una sola moneda para comparar rendimientos.</div>'
+        : '<section class="card">' +
+            '<div class="card-note" style="margin-bottom:12px;">Mejor desempeño: <strong style="color:var(--ink);">' + escapeHtml(comp.rows[0].name) + '</strong>' +
+              (comp.rows.length > 1 ? ' — considere concentrar próximos aportes ahí si el perfil de riesgo es similar.' : '.') +
+            '</div>' +
+            '<div class="row-list">' +
+              comp.rows.map(function(r, i){
+                var rColor = r.rend >= 0 ? 'var(--good)' : 'var(--bad)';
+                return '' +
+                  '<button type="button" class="dash-row" data-action="open-vehicle" data-id="' + r.id + '">' +
+                    '<span class="rank-medal">' + (i + 1) + '</span>' +
+                    '<div style="flex:1;min-width:0;">' +
+                      '<div class="dash-row-name">' + escapeHtml(r.name) + '</div>' +
+                      '<div class="dash-row-type">' + escapeHtml(r.type) + '</div>' +
+                    '</div>' +
+                    '<div style="text-align:right;flex:none;">' +
+                      '<div class="rank-pct" style="color:' + rColor + '">' + pct(r.rend) + '</div>' +
+                      '<div class="rank-xirr">' + (r.xirrRate !== null ? 'TIR ' + pct(r.xirrRate) + ' anual' : 'TIR no calculable') + '</div>' +
+                    '</div>' +
+                  '</button>';
+              }).join('') +
+            '</div>' +
+            (comp.excluded > 0 ? '<div class="excluded-note">' + comp.excluded + ' vehículo(s) no incluido(s) (falta valoración o tienen registros en varias monedas).</div>' : '') +
+          '</section>'
+      );
+
+    var diversificationHtml = '' +
+      '<div class="section-eyebrow">Diversificación del portafolio</div>' +
+      (div.total === 0
+        ? '<div class="empty-box">Registre aportes con tasa de cambio completa para ver la concentración del portafolio.</div>'
+        : '<div class="grid-2">' +
+            '<section class="card">' +
+              '<h2 class="subsection-h">Por tipo de vehículo</h2>' +
+              '<div style="margin-top:14px;">' +
+                div.typeRows.map(function(r){
+                  return '<div class="diversif-row">' +
+                    '<span class="diversif-label" title="' + escapeHtml(r.label) + '">' + escapeHtml(r.label) + '</span>' +
+                    '<div class="diversif-bar-wrap"><div class="diversif-bar" style="width:' + r.pct.toFixed(1) + '%;background:' + r.color + ';"></div></div>' +
+                    '<span class="diversif-pct">' + r.pct.toFixed(1).replace('.', ',') + ' %</span>' +
+                  '</div>';
+                }).join('') +
+              '</div>' +
+              (div.topType && div.topType.pct >= 60 ? '<div class="excluded-note">Concentración alta: ' + div.topType.pct.toFixed(0) + ' % del portafolio aportado está en vehículos tipo «' + escapeHtml(div.topType.label) + '».</div>' : '') +
+            '</section>' +
+            '<section class="card">' +
+              '<h2 class="subsection-h">Por moneda</h2>' +
+              '<div style="margin-top:14px;">' +
+                div.curRows.map(function(r){
+                  return '<div class="diversif-row">' +
+                    '<span class="diversif-label">' + escapeHtml(r.label) + '</span>' +
+                    '<div class="diversif-bar-wrap"><div class="diversif-bar" style="width:' + r.pct.toFixed(1) + '%;background:' + r.color + ';"></div></div>' +
+                    '<span class="diversif-pct">' + r.pct.toFixed(1).replace('.', ',') + ' %</span>' +
+                  '</div>';
+                }).join('') +
+              '</div>' +
+            '</section>' +
+          '</div>' +
+          (div.missingCount > 0 ? '<div class="conv-note" style="margin-top:10px;">' + div.missingCount + ' aporte(s) sin tasa de cambio no se incluyeron en este análisis.</div>' : '')
+      );
 
     var portfolioHtml;
     if (p.vehiclesFull === 0) {
@@ -846,6 +1056,10 @@
 
         '<div class="section-eyebrow" style="margin-top:26px;">Portafolio total, convertido a COP</div>' +
         portfolioHtml +
+
+        alertsHtml +
+        comparisonHtml +
+        diversificationHtml +
 
         '<div class="section-eyebrow">Detalle por moneda original</div>' +
         currencyRow +
@@ -910,6 +1124,10 @@
         ? '<div class="conv-note">≈ ' + money(s.lastValCOP, 'COP') + '</div>'
         : '<div class="conv-note">Sin tasa de cambio registrada</div>';
     }
+
+    var staleHtml = isStale(v)
+      ? '<div class="warning-box">Este vehículo no se actualiza hace ' + ageTextFromDays(daysSince(lastActivityDate(v))) + '. Considere registrar una valoración reciente.</div>'
+      : '';
 
     var series = chartSeries(v, s);
     var chartHtml = '';
@@ -985,6 +1203,7 @@
         '</div>' +
 
         (s.mixed ? '<div class="warning-box">Este vehículo tiene registros en más de una moneda, por eso el rendimiento y la TIR no se calculan aquí. Cada aporte y valoración sí puede convertirse a COP por separado si le asigna una tasa de cambio.</div>' : '') +
+        staleHtml +
 
         '<div class="section-eyebrow">Evolución del valor</div>' +
         '<section class="card chart-card">' + chartHtml + '</section>' +
@@ -1008,7 +1227,7 @@
 
         '<div class="roadmap-note">' +
           '<div class="roadmap-tag">Fase 2</div>' +
-          '<div class="roadmap-text">Esta versión ya calcula la TIR (XIRR), convierte a COP con tasa manual, muestra la evolución del valor y permite exportar los datos. Alertas de vehículos sin actualizar, comparación entre vehículos y análisis de diversificación quedan en el backlog.</div>' +
+          '<div class="roadmap-text">Esta versión calcula la TIR (XIRR), convierte a COP con tasa manual, muestra la evolución del valor, compara vehículos entre sí, avisa de vehículos sin actualizar y analiza la diversificación del portafolio. Los datos pueden exportarse e importarse como respaldo desde el panel lateral.</div>' +
         '</div>' +
       '</div>';
   }
@@ -1164,10 +1383,20 @@
       case 'export-csv':
         downloadFile('seguimiento-inversiones.csv', buildExportCSV(), 'text/csv');
         break;
+      case 'import-json':
+        var fileInput = document.getElementById('import-file-input');
+        if (fileInput) fileInput.click();
+        break;
     }
   });
 
   root.addEventListener('change', function(e){
+    if (e.target && e.target.id === 'import-file-input') {
+      var file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (file) handleImportFile(file);
+      return;
+    }
     if (e.target && e.target.id === 'modal-currency' && state.modal) {
       var m = state.modal;
       var dateEl = document.getElementById('modal-date');
