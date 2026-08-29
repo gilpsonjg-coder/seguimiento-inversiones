@@ -12,22 +12,27 @@ Es una sola página autocontenida sin backend ni dependencias de build. Basta co
 Todos los datos se guardan únicamente en el `localStorage` del navegador que la abre —
 no hay servidor ni sincronización entre dispositivos.
 
-## Qué hace (Fase 1)
+## Qué hace (Fase 1 + Fase 2)
 
 - Crear vehículos de inversión con nombre y tipo libre (catálogo abierto).
-- Registrar aportes y valoraciones por vehículo, con fecha, monto y moneda (COP, USD, GBP).
+- Registrar aportes y valoraciones por vehículo, con fecha, monto, moneda (COP, USD,
+  GBP) y una tasa de cambio a COP opcional por registro.
 - Editar y borrar cualquier registro (con confirmación antes de borrar).
-- Ver por vehículo: total aportado, última valoración y % de rendimiento acumulado
-  (última valoración vs. total aportado). Si aún no hay valoración, no se muestra
-  ningún porcentaje.
-- Dashboard consolidado: participación de cada vehículo sobre el capital aportado,
-  agrupado por moneda (sin conversión entre monedas).
+- Ver por vehículo: total aportado, última valoración, % de rendimiento simple
+  (última valoración vs. total aportado) y TIR anualizada (XIRR) — que sí maneja bien
+  aportes irregulares en el tiempo. Si aún no hay valoración, no se muestra ningún
+  porcentaje.
+- Gráfico de evolución por vehículo: aportado acumulado vs. valor registrado en el
+  tiempo.
+- Dashboard con dos vistas: el portafolio total consolidado en COP (usando la tasa de
+  cambio registrada en cada aporte/valoración) y el detalle por moneda original.
+- Exportar todos los datos a JSON o CSV.
 
-## Qué no hace todavía (Fase 2 / backlog)
+## Qué no hace todavía (backlog)
 
-Ver [`Salidas/roadmap.md`](Salidas/roadmap.md): cálculo XIRR, consolidado en una moneda
-base, gráficos de tendencia en el tiempo, exportación de datos (JSON/CSV), alertas y
-comparación entre vehículos.
+Ver [`Salidas/roadmap.md`](Salidas/roadmap.md): alertas de vehículos sin actualizar,
+comparación de rendimiento entre vehículos, y análisis de diversificación/riesgo del
+portafolio.
 
 ## Contexto del proyecto
 
