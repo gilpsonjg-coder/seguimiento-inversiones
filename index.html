@@ -209,6 +209,25 @@
   .btn-cancel{cursor:pointer;background:#fff;border:1px solid var(--line);color:var(--ink);font-size:14px;font-weight:600;padding:12px 18px;border-radius:12px;}
   .btn-cancel:hover{border-color:var(--navy);color:var(--navy);}
 
+  .stat-sub{font-size:12px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--line);}
+  .stat-sub strong{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;}
+  .conv-note{font-size:11px;color:var(--faint);margin-top:4px;}
+
+  .section-eyebrow{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--navy);font-weight:700;margin:36px 0 0 0;}
+
+  .chart-card{margin-top:20px;}
+  .chart-empty{padding:30px 16px;text-align:center;font-size:13px;line-height:1.5;color:var(--muted);border:1px dashed var(--line);border-radius:12px;}
+  .chart-svg{width:100%;height:auto;display:block;margin-top:14px;}
+  .chart-legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:12px;}
+  .chart-legend-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);}
+  .chart-legend-swatch{width:16px;height:0;border-top-width:2px;border-top-style:solid;}
+
+  .field-hint{font-size:11px;color:var(--faint);text-transform:none;letter-spacing:normal;font-weight:500;margin-top:-2px;}
+
+  .btn-link-sidebar{cursor:pointer;background:transparent;border:none;color:var(--sidebar-tint);font-size:11px;font-weight:600;padding:0;text-decoration:underline;text-underline-offset:2px;}
+  .btn-link-sidebar:hover{color:#fff;}
+  .export-row{display:flex;gap:14px;margin-top:12px;}
+
   @media (max-width: 860px){
     .app-shell{flex-direction:column;height:auto;min-height:100vh;}
     .sidebar{width:100%;}
@@ -250,6 +269,9 @@
   function dateText(s){
     return parseDateStr(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
   }
+  function dateTextFromDate(d){
+    return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
   function ageText(s){
     var days = Math.round((Date.now() - parseDateStr(s).getTime()) / 86400000);
     if (days <= 0) return 'hoy';
@@ -264,6 +286,48 @@
     v.aportes.concat(v.valoraciones).forEach(function(r){ set[r.currency] = 1; });
     return Object.keys(set);
   }
+  function toCOP(r){
+    if (r.currency === 'COP') return r.amount;
+    if (r.fxRate) return r.amount * r.fxRate;
+    return null;
+  }
+  function xnpv(rate, cfs, d0){
+    return cfs.reduce(function(acc, cf){
+      var days = (cf.date - d0) / 86400000;
+      return acc + cf.amount / Math.pow(1 + rate, days / 365);
+    }, 0);
+  }
+  function xirr(cfs){
+    var sorted = cfs.slice().sort(function(a, b){ return a.date - b.date; });
+    var d0 = sorted[0].date;
+    var span = sorted[sorted.length - 1].date - d0;
+    if (span <= 0) return null;
+    var hasPos = sorted.some(function(c){ return c.amount > 0; });
+    var hasNeg = sorted.some(function(c){ return c.amount < 0; });
+    if (!hasPos || !hasNeg) return null;
+
+    var rate = 0.1;
+    for (var i = 0; i < 60; i++) {
+      var f = xnpv(rate, sorted, d0);
+      var df = (xnpv(rate + 1e-6, sorted, d0) - f) / 1e-6;
+      if (Math.abs(df) < 1e-12) break;
+      var next = rate - f / df;
+      if (!isFinite(next) || next <= -0.999999) break;
+      if (Math.abs(next - rate) < 1e-9) return next;
+      rate = next;
+    }
+
+    var lo = -0.999999, hi = 10;
+    var flo = xnpv(lo, sorted, d0), fhi = xnpv(hi, sorted, d0);
+    if (flo * fhi > 0) return null;
+    for (var j = 0; j < 200; j++) {
+      var mid = (lo + hi) / 2;
+      var fm = xnpv(mid, sorted, d0);
+      if (Math.abs(fm) < 1e-6 || (hi - lo) < 1e-9) return mid;
+      if ((flo < 0) === (fm < 0)) { lo = mid; flo = fm; } else { hi = mid; fhi = fm; }
+    }
+    return (lo + hi) / 2;
+  }
   function summarize(v){
     var curs = currenciesOf(v);
     var mixed = curs.length > 1;
@@ -275,7 +339,30 @@
     var last = vals.length ? vals[vals.length - 1] : null;
     var rend = null;
     if (last && !mixed && total > 0) rend = (last.amount - total) / total;
-    return { curs: curs, mixed: mixed, cur: cur, total: total, totalsByCurrency: totalsByCurrency, last: last, rend: rend };
+
+    var xirrRate = null;
+    if (!mixed && last && total > 0 && v.aportes.length > 0) {
+      var cfs = v.aportes.map(function(a){ return { date: parseDateStr(a.date), amount: -a.amount }; });
+      cfs.push({ date: parseDateStr(last.date), amount: last.amount });
+      xirrRate = xirr(cfs);
+    }
+
+    var totalCOP = 0, totalCOPMissing = 0;
+    v.aportes.forEach(function(a){
+      var c = toCOP(a);
+      if (c === null) totalCOPMissing++; else totalCOP += c;
+    });
+    var lastValCOP = last ? toCOP(last) : null;
+    var lastValCOPMissing = !!(last && lastValCOP === null);
+    var rendCOP = null;
+    if (lastValCOP !== null && totalCOP > 0 && totalCOPMissing === 0) rendCOP = (lastValCOP - totalCOP) / totalCOP;
+
+    return {
+      curs: curs, mixed: mixed, cur: cur, total: total, totalsByCurrency: totalsByCurrency, last: last, rend: rend,
+      xirrRate: xirrRate,
+      totalCOP: totalCOP, totalCOPMissing: totalCOPMissing,
+      lastValCOP: lastValCOP, lastValCOPMissing: lastValCOPMissing, rendCOP: rendCOP
+    };
   }
   function totalText(v, s){
     var currs = Object.keys(s.totalsByCurrency);
@@ -367,13 +454,25 @@
     if (amount <= 0) { m.error = 'El monto debe ser mayor que cero.'; render(); return; }
     var currency = document.getElementById('modal-currency').value;
 
+    var fxRate;
+    if (currency !== 'COP') {
+      var fxEl = document.getElementById('modal-fxrate');
+      var rawFx = fxEl ? String(fxEl.value || '').trim() : '';
+      if (rawFx) {
+        var fxNormalized = rawFx.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+        var fxNum = Number(fxNormalized);
+        if (isNaN(fxNum) || fxNum <= 0) { m.error = 'La tasa de cambio debe ser un número mayor que cero, o déjela vacía.'; render(); return; }
+        fxRate = fxNum;
+      }
+    }
+
     state.vehicles = state.vehicles.map(function(v){
       if (v.id !== m.vehicleId) return v;
       var list;
       if (m.editId) {
-        list = v[listKey].map(function(r){ return r.id === m.editId ? { id: r.id, date: date, amount: amount, currency: currency } : r; });
+        list = v[listKey].map(function(r){ return r.id === m.editId ? { id: r.id, date: date, amount: amount, currency: currency, fxRate: fxRate } : r; });
       } else {
-        list = v[listKey].concat([{ id: uid(), date: date, amount: amount, currency: currency }]);
+        list = v[listKey].concat([{ id: uid(), date: date, amount: amount, currency: currency, fxRate: fxRate }]);
       }
       var patch = {}; patch[listKey] = list;
       return Object.assign({}, v, patch);
@@ -451,7 +550,7 @@
       noRows: rows.length === 0,
       hasExcluded: excluded.length > 0,
       excludedText: excluded.length
-        ? 'Hay vehículos con aportes en ' + excluded.join(' y ') + '. La Fase 1 no convierte monedas, por eso cada moneda se consolida por separado.'
+        ? 'Hay vehículos con aportes en ' + excluded.join(' y ') + '. Este detalle no convierte monedas; vea el consolidado en COP arriba.'
         : ''
     };
   }
@@ -459,12 +558,147 @@
   function recordsOf(v, kind){
     var listKey = kind === 'aporte' ? 'aportes' : 'valoraciones';
     return v[listKey].slice().sort(function(a, b){ return parseDateStr(b.date) - parseDateStr(a.date); }).map(function(r){
+      var meta = dateText(r.date) + ' · ' + ageText(r.date);
+      if (r.currency !== 'COP') {
+        var cop = toCOP(r);
+        meta += cop !== null ? ' · ≈ ' + money(cop, 'COP') : ' · sin tasa de cambio registrada';
+      }
       return {
         id: r.id,
         amountText: money(r.amount, r.currency),
-        metaText: dateText(r.date) + ' · ' + ageText(r.date)
+        metaText: meta
       };
     });
+  }
+
+  function portfolioCOP(){
+    var includedAportado = 0, includedValor = 0, vehiclesFull = 0;
+    var excludedNames = [];
+    state.vehicles.forEach(function(v){
+      var s = summarize(v);
+      var aporteOk = v.aportes.length > 0 && s.totalCOPMissing === 0;
+      var valorOk = !!s.last && s.lastValCOP !== null;
+      if (aporteOk && valorOk) {
+        includedAportado += s.totalCOP;
+        includedValor += s.lastValCOP;
+        vehiclesFull++;
+      } else if (v.aportes.length > 0 || s.last) {
+        excludedNames.push(v.name);
+      }
+    });
+    var rend = (vehiclesFull > 0 && includedAportado > 0) ? (includedValor - includedAportado) / includedAportado : null;
+    return {
+      includedAportado: includedAportado,
+      includedValor: includedValor,
+      vehiclesFull: vehiclesFull,
+      totalVehicles: state.vehicles.length,
+      excludedNames: excludedNames,
+      rend: rend
+    };
+  }
+
+  function shortDateLabel(d){
+    return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+  }
+
+  function chartSeries(v, s){
+    if (s.mixed) return null;
+    if (!v.aportes.length && !v.valoraciones.length) return null;
+    var aportesSorted = v.aportes.slice().sort(function(a, b){ return parseDateStr(a.date) - parseDateStr(b.date); });
+    var cum = 0;
+    var costPoints = aportesSorted.map(function(a){ cum += a.amount; return { date: parseDateStr(a.date), value: cum }; });
+    var valPoints = v.valoraciones.slice().sort(function(a, b){ return parseDateStr(a.date) - parseDateStr(b.date); })
+      .map(function(r){ return { date: parseDateStr(r.date), value: r.amount }; });
+    return { costPoints: costPoints, valPoints: valPoints, cur: s.cur };
+  }
+
+  function renderChartSvg(series){
+    var W = 640, H = 220, padTop = 16, padBottom = 30, padX = 6;
+    var allDates = series.costPoints.concat(series.valPoints).map(function(p){ return p.date.getTime(); });
+    var today = new Date();
+    var minDate = Math.min.apply(null, allDates);
+    var maxDate = Math.max.apply(null, allDates.concat([today.getTime()]));
+    var span = Math.max(maxDate - minDate, 86400000);
+    var allValues = series.costPoints.concat(series.valPoints).map(function(p){ return p.value; });
+    var maxVal = Math.max.apply(null, allValues.concat([0])) * 1.12 || 1;
+
+    function x(d){ return padX + ((d.getTime ? d.getTime() : d) - minDate) / span * (W - padX * 2); }
+    function y(v2){ return padTop + (1 - v2 / maxVal) * (H - padTop - padBottom); }
+
+    var costPath = '';
+    if (series.costPoints.length) {
+      costPath = 'M ' + x(series.costPoints[0].date) + ' ' + y(series.costPoints[0].value);
+      for (var i = 1; i < series.costPoints.length; i++) {
+        costPath += ' H ' + x(series.costPoints[i].date) + ' V ' + y(series.costPoints[i].value);
+      }
+      costPath += ' H ' + x(today);
+    }
+    var valPath = series.valPoints.map(function(p, i){
+      return (i === 0 ? 'M ' : 'L ') + x(p.date) + ' ' + y(p.value);
+    }).join(' ');
+
+    var baseline = padTop + (H - padTop - padBottom);
+    var circles = series.valPoints.map(function(p, i){
+      var isLast = i === series.valPoints.length - 1;
+      var r = isLast ? 5 : 3.5;
+      return '<circle cx="' + x(p.date) + '" cy="' + y(p.value) + '" r="' + r + '" fill="#003A70" stroke="#fff" stroke-width="1.5">' +
+        '<title>' + escapeHtml(dateTextFromDate(p.date)) + ': ' + escapeHtml(money(p.value, series.cur)) + '</title>' +
+        '</circle>';
+    }).join('');
+
+    var firstLabel = shortDateLabel(new Date(minDate));
+    var lastLabel = shortDateLabel(today);
+
+    return '' +
+      '<svg class="chart-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Evolución del valor y del capital aportado">' +
+        '<line x1="' + padX + '" y1="' + baseline + '" x2="' + (W - padX) + '" y2="' + baseline + '" stroke="#D3DCE2" stroke-width="1"/>' +
+        (costPath ? '<path d="' + costPath + '" fill="none" stroke="#FF6A14" stroke-width="2" stroke-dasharray="5 4"/>' : '') +
+        (valPath ? '<path d="' + valPath + '" fill="none" stroke="#003A70" stroke-width="2.5"/>' : '') +
+        circles +
+        '<text x="' + padX + '" y="' + (H - 8) + '" font-size="11" fill="#9BA6AC" font-family="Montserrat, sans-serif">' + firstLabel + '</text>' +
+        '<text x="' + (W - padX) + '" y="' + (H - 8) + '" font-size="11" fill="#9BA6AC" font-family="Montserrat, sans-serif" text-anchor="end">' + lastLabel + '</text>' +
+      '</svg>';
+  }
+
+  function buildExportJSON(){
+    return JSON.stringify({ exportedAt: new Date().toISOString(), vehicles: state.vehicles }, null, 2);
+  }
+  function csvEscape(val){
+    var s = String(val == null ? '' : val);
+    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function buildExportCSV(){
+    var rows = [['vehiculo', 'tipo', 'tipo_registro', 'fecha', 'monto', 'moneda', 'tasa_a_cop', 'monto_cop']];
+    state.vehicles.forEach(function(v){
+      v.aportes.forEach(function(r){ rows.push(csvRowOf(v, 'aporte', r)); });
+      v.valoraciones.forEach(function(r){ rows.push(csvRowOf(v, 'valoracion', r)); });
+    });
+    return rows.map(function(row){ return row.map(csvEscape).join(','); }).join('\r\n');
+  }
+  function csvRowOf(v, kind, r){
+    var cop = toCOP(r);
+    return [v.name, v.type, kind, r.date, r.amount, r.currency, r.fxRate || '', cop === null ? '' : cop];
+  }
+  function fallbackDownload(filename, content, mime){
+    try {
+      var blob = new Blob([content], { type: mime });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    } catch (e) { /* no se pudo exportar */ }
+  }
+  function downloadFile(filename, content, mime){
+    if (window.claude && typeof window.claude.use === 'function') {
+      window.claude.use('downloads').then(function(downloads){
+        if (!downloads) { fallbackDownload(filename, content, mime); return; }
+        downloads.save({ filename: filename, data: content }).catch(function(){ /* el usuario canceló o falló */ });
+      }).catch(function(){ fallbackDownload(filename, content, mime); });
+    } else {
+      fallbackDownload(filename, content, mime);
+    }
   }
 
   // ---------- Render ----------
@@ -530,6 +764,12 @@
         '<div class="sidebar-foot">' +
           '<button type="button" class="btn-primary" data-action="new-vehicle">Nuevo vehículo</button>' +
           '<div class="privacy-note">Los datos viven únicamente en este navegador. No se envían a ningún servidor.</div>' +
+          (count > 0 ? (
+            '<div class="export-row">' +
+              '<button type="button" class="btn-link-sidebar" data-action="export-json">Exportar JSON</button>' +
+              '<button type="button" class="btn-link-sidebar" data-action="export-csv">Exportar CSV</button>' +
+            '</div>'
+          ) : '') +
         '</div>' +
       '</aside>';
   }
@@ -543,6 +783,35 @@
 
   function renderDashboard(){
     var d = dashVals();
+    var p = portfolioCOP();
+
+    var portfolioHtml;
+    if (p.vehiclesFull === 0) {
+      portfolioHtml = '<div class="empty-box">Para ver el acumulado total en COP, cada vehículo necesita al menos un aporte con moneda/tasa completa y una valoración. ' +
+        (p.totalVehicles > 0 ? 'Para vehículos en USD o GBP, registre la tasa de cambio al aporte o valoración.' : '') + '</div>';
+    } else {
+      var rendCopText = p.rend === null ? '—' : pct(p.rend);
+      var rendCopColor = p.rend === null ? 'var(--faint)' : (p.rend >= 0 ? 'var(--good)' : 'var(--bad)');
+      portfolioHtml = '' +
+        '<div class="grid-3">' +
+          '<div class="stat-card">' +
+            '<div class="card-label">Total aportado (COP)</div>' +
+            '<div class="stat-value">' + money(p.includedAportado, 'COP') + '</div>' +
+            '<div class="stat-note">' + p.vehiclesFull + ' de ' + p.totalVehicles + ' vehículo(s) incluidos</div>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<div class="card-label">Valor actual (COP)</div>' +
+            '<div class="stat-value">' + money(p.includedValor, 'COP') + '</div>' +
+            '<div class="stat-note">Última valoración de cada vehículo incluido</div>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<div class="card-label">Rendimiento consolidado</div>' +
+            '<div class="stat-value" style="color:' + rendCopColor + '">' + rendCopText + '</div>' +
+            '<div class="stat-note">Valor actual vs. aportado, solo vehículos incluidos</div>' +
+          '</div>' +
+        '</div>' +
+        (p.excludedNames.length ? '<div class="excluded-note">No incluidos en este consolidado (falta tasa de cambio o valoración): ' + p.excludedNames.map(escapeHtml).join(', ') + '.</div>' : '');
+    }
 
     var currencyRow = d.multiCurrency ? (
       '<div class="currency-row">' +
@@ -574,6 +843,11 @@
       '<div class="page">' +
         '<div class="eyebrow">Consolidado del portafolio</div>' +
         '<h1 class="page-title">Dashboard</h1>' +
+
+        '<div class="section-eyebrow" style="margin-top:26px;">Portafolio total, convertido a COP</div>' +
+        portfolioHtml +
+
+        '<div class="section-eyebrow">Detalle por moneda original</div>' +
         currencyRow +
         '<div class="grid-2">' +
           '<section class="card">' +
@@ -618,6 +892,41 @@
       ? (s.mixed ? 'Registros en varias monedas' : (v.aportes.length === 0 ? 'Falta registrar aportes' : 'Falta una valoración para calcularlo'))
       : (subjective ? 'Sobre un valor estimado por usted' : 'Última valoración vs. total aportado');
 
+    var xirrHtml = '';
+    if (s.rend !== null) {
+      var xirrText = s.xirrRate === null ? 'no se pudo calcular' : '<strong>' + pct(s.xirrRate) + ' anual</strong>';
+      xirrHtml = '<div class="stat-sub">TIR anualizada (XIRR): ' + xirrText + '</div>';
+    }
+
+    var totalCopNote = '';
+    if (s.cur !== 'COP' && v.aportes.length > 0) {
+      totalCopNote = s.totalCOPMissing === 0
+        ? '<div class="conv-note">≈ ' + money(s.totalCOP, 'COP') + ' con la tasa registrada</div>'
+        : '<div class="conv-note">' + s.totalCOPMissing + ' aporte(s) sin tasa de cambio registrada</div>';
+    }
+    var lastValCopNote = '';
+    if (s.cur !== 'COP' && s.last) {
+      lastValCopNote = s.lastValCOP !== null
+        ? '<div class="conv-note">≈ ' + money(s.lastValCOP, 'COP') + '</div>'
+        : '<div class="conv-note">Sin tasa de cambio registrada</div>';
+    }
+
+    var series = chartSeries(v, s);
+    var chartHtml = '';
+    if (series === null) {
+      chartHtml = s.mixed
+        ? '<div class="chart-empty">La gráfica no está disponible cuando hay registros en más de una moneda.</div>'
+        : '<div class="chart-empty">Registre aportes o valoraciones para ver la evolución.</div>';
+    } else if (!series.valPoints.length) {
+      chartHtml = '<div class="chart-empty">Registre al menos una valoración para ver la evolución del valor.</div>';
+    } else {
+      chartHtml = renderChartSvg(series) +
+        '<div class="chart-legend">' +
+          '<span class="chart-legend-item"><span class="chart-legend-swatch" style="border-color:#FF6A14;border-top-style:dashed;"></span>Total aportado (acumulado)</span>' +
+          '<span class="chart-legend-item"><span class="chart-legend-swatch" style="border-color:#003A70;"></span>Valor registrado</span>' +
+        '</div>';
+    }
+
     function recordRows(list, kind){
       if (!list.length) {
         var msg = kind === 'aporte'
@@ -659,20 +968,26 @@
             '<div class="card-label">Total aportado</div>' +
             '<div class="stat-value" style="white-space:normal;">' + totalTextVal + '</div>' +
             '<div class="stat-note">' + aporteCountText + '</div>' +
+            totalCopNote +
           '</div>' +
           '<div class="stat-card">' +
             '<div class="card-label">Última valoración</div>' +
             '<div class="stat-value">' + lastValText + '</div>' +
             '<div class="stat-note">' + lastValDateText + '</div>' +
+            lastValCopNote +
           '</div>' +
           '<div class="stat-card">' +
             '<div class="card-label">Rendimiento acumulado</div>' +
             '<div class="stat-value" style="color:' + rendColor + '">' + rendText + '</div>' +
             '<div class="stat-note">' + rendNote + '</div>' +
+            xirrHtml +
           '</div>' +
         '</div>' +
 
-        (s.mixed ? '<div class="warning-box">Este vehículo tiene registros en más de una moneda. La Fase 1 no convierte monedas, por eso el rendimiento no se calcula aquí.</div>' : '') +
+        (s.mixed ? '<div class="warning-box">Este vehículo tiene registros en más de una moneda, por eso el rendimiento y la TIR no se calculan aquí. Cada aporte y valoración sí puede convertirse a COP por separado si le asigna una tasa de cambio.</div>' : '') +
+
+        '<div class="section-eyebrow">Evolución del valor</div>' +
+        '<section class="card chart-card">' + chartHtml + '</section>' +
 
         '<div class="grid-records">' +
           '<section class="card">' +
@@ -692,8 +1007,8 @@
         '</div>' +
 
         '<div class="roadmap-note">' +
-          '<div class="roadmap-tag">Fase 1</div>' +
-          '<div class="roadmap-text">Esta versión registra aportes y valoraciones y calcula el rendimiento simple por vehículo. XIRR, consolidado en COP, gráficos de tendencia y exportación de datos llegan en la Fase 2.</div>' +
+          '<div class="roadmap-tag">Fase 2</div>' +
+          '<div class="roadmap-text">Esta versión ya calcula la TIR (XIRR), convierte a COP con tasa manual, muestra la evolución del valor y permite exportar los datos. Alertas de vehículos sin actualizar, comparación entre vehículos y análisis de diversificación quedan en el backlog.</div>' +
         '</div>' +
       '</div>';
   }
@@ -748,6 +1063,12 @@
             '</select>' +
           '</label>' +
         '</div>' +
+        (m.currency && m.currency !== 'COP' ? (
+          '<label class="field">Tasa de cambio a COP (opcional)' +
+            '<span class="field-hint">1 ' + escapeHtml(m.currency) + ' = ¿cuántos COP? Déjelo vacío si no la tiene a mano.</span>' +
+            '<input id="modal-fxrate" value="' + escapeHtml(m.fxRate || '') + '" placeholder="Ej: 4100">' +
+          '</label>'
+        ) : '') +
       '</div>'
     );
 
@@ -807,11 +1128,11 @@
         break;
       case 'new-aporte':
         v = selectedVehicle();
-        if (v) openModal({ kind: 'aporte', vehicleId: v.id, date: today(), amount: '', currency: summarize(v).cur });
+        if (v) openModal({ kind: 'aporte', vehicleId: v.id, date: today(), amount: '', currency: summarize(v).cur, fxRate: '' });
         break;
       case 'new-valoracion':
         v = selectedVehicle();
-        if (v) openModal({ kind: 'valoracion', vehicleId: v.id, date: today(), amount: '', currency: summarize(v).cur });
+        if (v) openModal({ kind: 'valoracion', vehicleId: v.id, date: today(), amount: '', currency: summarize(v).cur, fxRate: '' });
         break;
       case 'edit-record':
         v = selectedVehicle();
@@ -819,7 +1140,7 @@
           var kind = el.getAttribute('data-kind');
           var listKey = kind === 'aporte' ? 'aportes' : 'valoraciones';
           r = v[listKey].find(function(x){ return x.id === el.getAttribute('data-id'); });
-          if (r) openModal({ kind: kind, vehicleId: v.id, editId: r.id, date: r.date, amount: String(r.amount), currency: r.currency });
+          if (r) openModal({ kind: kind, vehicleId: v.id, editId: r.id, date: r.date, amount: String(r.amount), currency: r.currency, fxRate: r.fxRate != null ? String(r.fxRate) : '' });
         }
         break;
       case 'delete-record':
@@ -837,6 +1158,27 @@
       case 'save-modal': saveModal(); break;
       case 'close-confirm': closeConfirm(); break;
       case 'confirm-delete': doConfirm(); break;
+      case 'export-json':
+        downloadFile('seguimiento-inversiones.json', buildExportJSON(), 'application/json');
+        break;
+      case 'export-csv':
+        downloadFile('seguimiento-inversiones.csv', buildExportCSV(), 'text/csv');
+        break;
+    }
+  });
+
+  root.addEventListener('change', function(e){
+    if (e.target && e.target.id === 'modal-currency' && state.modal) {
+      var m = state.modal;
+      var dateEl = document.getElementById('modal-date');
+      var amountEl = document.getElementById('modal-amount');
+      var fxEl = document.getElementById('modal-fxrate');
+      if (dateEl) m.date = dateEl.value;
+      if (amountEl) m.amount = amountEl.value;
+      if (fxEl) m.fxRate = fxEl.value;
+      m.currency = e.target.value;
+      m.error = '';
+      render();
     }
   });
 
